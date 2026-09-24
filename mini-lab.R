@@ -26,7 +26,7 @@ female_pedestrians_crashes <- crashes |>
 # does one row still represent one crash? check it. 
 ##one row represents one crash that involved a female pedestrian.
 # why a filtering join instead of a mutating join? 
-## so it does not add any more rows into our data
+## so it does not add any more columns into our data
 # 3: Right now the vehicle types are columns. We want one row per vehicle. 
 # before writing your code, how many rows should we have? 
 ## 4940*5=24700
