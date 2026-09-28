@@ -35,14 +35,21 @@ Import the three files. You'll need to tell R to treat `""`, `"NA"`, and `"\\N"`
 ```{r}
 #| warning: false
 library(tidyverse)
-results <- read_csv("data/raw/results.csv")
+results <- read_csv("data/raw/results.csv",
+                    na = c("", "NA", "\\N"))
+qualifying <- read_csv("data/raw/qualifying.csv", 
+                       na = c("", "NA", "\\N"))
+races <- read_csv("data/raw/races.csv",
+                  na = c("", "NA", "\\N"))
 ```
 
 Inspect your tables.
 
 ```{r}
 #| warning: false
-
+glimpse(results)
+glimpse(qualifying)
+glimpse(races)
 ```
 
 ## Before moving forward
@@ -50,16 +57,32 @@ Inspect your tables.
 For each table, answer:
 
 > What does one row represent?
+>
+> Results: One row represents the performance metrics for a specific race.
+>
+> Qualifying: One row represents a single racers ID and their race times and place for each qualifying segment.
+>
+> Races: One row represents a race location for a specific date
 
 > What variable uniquely identifies one row?
+>
+> Results: QaulifyId
+>
+> Qualifying: RaceId
+>
+> Races: ResultId
 
 > What variable(s) connect this table to the other tables?
+>
+> Field and DriverId
 
 ## What is the grain?
 
 You are ultimately interested in **qualifying performances**, so your final table needs to preserve the grain that lets you make that comparison.
 
 > Which table should establish the grain of your final analytic table? Why?
+>
+> The table that should establish the grain of the final analytic table is results.csv because it has the most information. It carries the RaceId as in the other tables but gets more specific into the different variables from each race.
 
 Now build smaller working tables with only the variables you need.
 
@@ -70,6 +93,17 @@ Your qualifying table should include:
 3.  `driverId`
 4.  `position`
 
+```{r}
+#| warning: false
+
+qualifying_data_clean <- qualifying |> 
+  select(qualifyId, raceId, driverId, position)
+
+glimpse(qualifying_data_clean)
+
+nrow(qualifying_data_clean) == n_distinct(qualifying_data_clean$qualifyId)
+```
+
 Your results table should include:
 
 1.  `resultId`
@@ -77,37 +111,107 @@ Your results table should include:
 3.  `driverId`
 4.  `positionOrder`
 
+```{r}
+#| warning: false
+results_data_clean <- results |> 
+  select(resultId, raceId, driverId, positionOrder)
+
+glimpse(results_data_clean)
+
+nrow(results_data_clean) == n_distinct(results_data_clean$resultId)
+```
+
 Your races table should include:
 
 1.  `raceId`
 2.  `year`
 3.  `name`
 
+```{r}
+#| warning: false
+races_data_clean <- races |> 
+  select(raceId, year, name)
+
+glimpse(races_data_clean)
+
+nrow(races_data_clean) == n_distinct(races_data_clean$raceId)
+```
+
 Verify your primary keys before you use them. For each table, check whether the identifying variable is actually unique, and whether any of your joining variables are missing.
 
 > Did every key check pass? What would it have meant for the joins ahead if one hadn't?
+>
+> Yes, every key check passed. If one hadn't worked it would've meant there would've been gaps in the data.
 
 ## Connect qualifying and race results
 
 > Add finishing order to each qualifying record, wherever a matching race result exists.
+
+```{r}
+#| warning: false
+qualifying_join <- qualifying_data_clean |> 
+  inner_join(results_data_clean, join_by(raceId, driverId),
+             suffix = c("_qualifying", "_result"))
+
+qualifying_with_results <- qualifying_data_clean |> 
+  inner_join(results_data_clean, join_by(raceId, driverId),
+             suffix = c("_qualifying", "_result"))
+
+glimpse(qualifying_with_results)
+```
 
 A note before you write it: `join_by()` takes more than one variable. Think about what it takes to pin down a single result. Is knowing the driver enough? Two drivers can finish third in different races. Two results can come from the same race. What combination actually identifies one driver's result in one race?
 
 Answer these **before** you run the join:
 
 > What should one row represent afterward?
+>
+> Afterward one row should represent a drivers statistical specifics from a race
 
 > Should the number of qualifying rows change?
+>
+> No, the number of qualifying rows should not change
 
 Now actually do the join.
 
 > Use `relationship =` to state the cardinality you expect. Did R agree with you? If it didn't, what does that tell you about the data?
 
+```{r}
+#| warning: false
+qualifying_with_results <- qualifying_data_clean |> 
+  inner_join(results_data_clean, join_by(raceId, driverId),
+             suffix = c("_qualifying", "_result"),
+             relationship = "one-to-one")
+
+glimpse(qualifying_with_results)
+```
+
 > Do any qualifying records have no matching race result? How many?
+
+```{r}
+#| warning: false
+match_check <- qualifying_data_clean |> 
+  left_join(results_data_clean, join_by(raceId, driverId)) |> 
+  filter(is.na(resultId))
+
+glimpse(match_check)
+```
 
 Then add the race year and race name to your joined table.
 
+```{r}
+#| warning: false
+qualifying_results_races <- qualifying_with_results |> 
+  inner_join(races |> 
+               select(raceId, year, name),
+             join_by(raceId))
+
+glimpse(qualifying_results_races)
+```
+
 > Should that join change your row count?
+>
+> No, it should not have.
 
 ## Investigate the historical coverage
 
@@ -119,29 +223,106 @@ You can't answer this by comparing row counts. The two tables have different gra
 
 Build a table containing every distinct `raceId`–`driverId` combination in `results`. Then build the same thing from `qualifying`.
 
+```{r}
+#| warning: false
+distinct_results <- results |> 
+  select(raceId, driverId) |> 
+  distinct()
+
+glimpse(distinct_results)
+
+distinct_qualifying <- qualifying |> 
+  select(raceId, driverId) |> 
+  distinct()
+
+glimpse(distinct_qualifying)
+```
+
 > What does one row represent in each of these tables?
+>
+> Raceid and driverid
 
 > Why `distinct()`? What would you be counting if you left it out?
+>
+> It pairs unique variables from raceid and driverid. It would be including all of the other unnecessary stuff from the rest of the dataset.
 
 Now find the combinations that appear in the results data but *not* in the qualifying data.
 
+```{r}
+#| warning: false
+results_no_qualifying <- results |> 
+  select(raceId, driverId) |> 
+  distinct() |> 
+  left_join(qualifying |> 
+              select(raceId, driverId) |> 
+              distinct() |> 
+              mutate(matched = TRUE),
+            join_by(raceId, driverId)) |> 
+              filter(is.na(matched)) |> 
+              select(raceId, driverId)
+
+glimpse(results_no_qualifying)
+```
+
 > How many are there?
+>
+> 16176
 
 > What proportion of all result combinations is that?
+>
+> 64%
 
 Attach the race year to those unmatched combinations, then plot the count of unmatched combinations by year.
 
 > Are the unmatched records spread evenly across Formula 1 history?
+>
+> Yes
+
+```{r}
+#| warning: false
+unmatched_year <- results |> 
+  select(raceId,driverId) |> 
+  distinct() |> 
+  left_join(qualifying |> 
+              select(raceId, driverId) |> 
+              distinct() |> 
+              mutate(matched = TRUE),
+            join_by(raceId, driverId)) |> 
+              filter(is.na(matched)) |> 
+              left_join(races |> 
+                          select(raceId, year),
+                        join_by(raceId)) |> 
+              count(year)
+
+glimpse(unmatched_year)
+```
 
 > Roughly when does substantial qualifying coverage begin?
+>
+> around 1950
 
 Do not speculate about *why* particular records are missing unless the documentation supports it. Just describe it.
+
+Lack of record tracking
 
 ## The payoff
 
 Using only the records where you have both a qualifying position and a finishing order, make a plot showing the relationship between the two.
 
+```{r}
+#| warning: false
+ggplot(unmatched_year, aes(x = year, y = n))+
+  geom_line(color = "blue")+
+  geom_point(color = "blue")+
+  labs(title = "Unmatched Results per Year", 
+       subtitle = "Missed Qualifying",
+       x = "Year",
+       y = "Unmatched Records")
+```
+
 > Describe what you see in two or three sentences.
+>
+> The recording of data has a lot of unmatched records. However, after around 1990 it seems to get a lot better especially post 2010.
 
 ## What this means for your question
 
@@ -156,3 +337,5 @@ You opened by asking whether qualifying performance is related to finishing perf
 > If you used an AI system: the exact prompt, exactly what it returned, what it got wrong or left unclear, and what you changed.
 
 > If you didn't use one, say so.
+
+Hayden Scott helped me a lot with understanding the purpose of this assignment and what questions were asking.
