@@ -1,3 +1,4 @@
+#DATA2004, Murphy
 # let's start with a quick review of Weekly 2
 
 # Regular expressions and messy-key repair
@@ -16,7 +17,7 @@ pa <- read_delim(
 glimpse(pa) 
 
 # what's the gain? 
-
+##The grain is a single campaign contribution record greater than 200 for PA in 2024.
 # let's work with occupation rather than employer this time, and we're specifically 
 # interested in engineers. 
 
@@ -28,16 +29,25 @@ pa |>
   filter(occupation == "Engineer")
 
 # why zero? what should we do now? 
+##Because the occupations are listed in all caps
 
-
-# are there problems if we left it at this? 
+pa |> 
+  filter(occupation == "ENGINEER")
+# are there problems if we left it at this?
+##Yes
 # what does occupation contain? could we want more than that? 
-
+pa |> 
+  select(occupation) |> 
+  print(n = 50)
 # we ultimately don't just want the literal string ENGINEER. we want records where 
 # the pattern E-N-G-I-N-E-E-R shows up anywhere. 
 
 # so let's start by using str_detect. 
+pa |> 
+  filter(str_detect(occupation, "ENGINEER"))
 
+engineer_candidates <- pa |> 
+  filter(str_detect(occupation, "ENGINEER"))
 # is there a chance that any of our occupations aren't in full caps? 
 pa |> 
   summarise(
@@ -74,20 +84,26 @@ cat("\\d")
 
 # but this doesn't exactly tell us what a word boundary does yet. 
 str_replace_all(c("STRATEGY ENGINEER", "ENGINEERING ASSISTANT",
-                  "V.P. SOFTWARE", "SENIOR DIRECTOR", "SITE RELIABILITY ENGINEER",
-                  "ENGINEER3", "ENGINEER_3"),
+                  "V.P. SOFTWARE & DEVELOPMENT", "SENIOR DIRECTOR", "SITE RELIABILITY ENGINEER",
+                  "ENGINEER 3", "ENGINEER-3"),
                 "\\b", "|")
 
 # we told R to replace word boundaries with |. So what is counting as a word boundary 
 # based on what we're seeing there? note: letters, digits, and _ also count as 
 # "word characters" 
-
+##regex seperates word characters from non word characters
 # so if we wanted to only retain occupation strings that contain <ENGINEER> what would we 
 # need to do? 
-
+engineer_candidates |> 
+  filter(str_detect(occupation, "\\bENGINEER\\b"))
 # start back with pa. how many records would we retain if we tried: exactly "ENGINEER",
 # contains "ENGINEER", and "ENGINEER" as a whole word. 
-
+pa |> 
+  summarise(
+    exact_matches = sum(occupation == "ENGINEER"),
+    pattern_match = sum(str_detect(occupation, "ENGINEER")),
+    whole_word = sum(str_detect(occupation, "\\bENGINEER\\b"))
+  )
 # the word boundary got rid of ENGINEERING. what else did it get rid of? 
 engineer_candidates |> 
   filter(!str_detect(occupation, "\\bENGINEER\\b")) |> 
@@ -95,7 +111,7 @@ engineer_candidates |>
   print(n = Inf)
 
 # are these all non-engineer? did we lose anything we wanted? 
-
+##No some of these are engineers and we lsot some we did not want to
 # \\b is part of regular expressions, but there are a variety of other regex 
 # we will need to use. we'll start with anchors 
 
@@ -110,6 +126,12 @@ str_view(x, "ENGINEER$")
 str_view(x, "^ENGINEER$")
 str_view(x, "^ENGINEERS$")
 
+engineer_candidates |> 
+  summarise(
+    exact = sum(occupation == "ENGINEER"),
+    boundary = sum(str_detect(occupation, "\\bENGINEER\\b")),
+    anchor = sum(str_detect(occupation, "^ENGINEER$"))
+  )
 # there are a few other regex options that we will need to know. 
 ## \\d = any digit 
 ## + = one or more of the preceding thing 
@@ -129,7 +151,7 @@ engineer_candidates |>
   select(occupation) |> 
   filter(str_detect(occupation, "\\d")) |> 
   mutate(level = str_extract(occupation, "\\d+")) # why + here? 
-
+##Gave duplicates and cant handle roman numerals, should principal be considered the same level as engineer
 # it worked, but do you think we got all of seniority? 
 # how would you want to look for more? 
 
