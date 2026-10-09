@@ -1,0 +1,32 @@
+---
+title: "Final Project Proposal: What Makes a Successful Steam Game?"
+format: html
+editor: visual
+---
+
+## What We Want to Know
+
+Our group would like to know what factors explain a Steam game's success, defined by the amount of owners of said game. We want to know the impact from ratings, sales, playtime, and more to give us a well-rounded understanding of what it takes to break the charts.
+
+Questions that we want answers to:
+
+- How much of an impact does playtime have on game sales? It could be that folks don't want to play a game with a huge time investment.
+- Does having a rich roster of supported languages influence game sales? And if so, which languages have the largest impact?
+- Are well-sold games actually higher rated, or do they just mildly satisfy everyone?
+- Do DLCs boost game sales, or do they drive folks away out of fear of being overcharged for basic features?
+
+## Where Is the Data?
+
+We found a good dataset to answer our question on Kaggle, and we will be using this to begin our project. If we need to find more data to answer our questions, we will go Kaggle hunting or perhaps obtain the data from Steam itself. Either way, we will have to manipulate our data to build a new dataset in order to solve our questions.
+
+## The Scope of This Project
+
+Our scope is quite small. We aren't venturing off to other gaming platforms and performing an analysis of all games. Nor are we measuring the success of a game on several dimensions; rather, we are merely looking at sales as a sole metric for success. Because of our limited scope, we can focus our efforts on what matters most for our project.
+
+## Potential Problem
+
+We might not have enough information about any given game to have a comprehensive enough project. There is also some information in other columns, like the website column and the support contact columns, that does not seem perfectly formatted, which might make it troublesome to get information out of.
+
+## Possible Solutions
+
+If we need more data, we will expand our horizons and synthesize our dataset with others to get a bigger picture of the story we are trying to capture. For data that isn't well formatted or isn't giving us our specific information too easily, we will have to use our string manipulation tactics to get smoother data to work with. For example, if we wanted the hostnames from each game's website, we'd have to perform some regex to get the hostname out of the website for us to use.
