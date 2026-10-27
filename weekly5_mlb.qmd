@@ -37,7 +37,13 @@ Build the request, send it, and check the status.
 
 ```{r}
 #| warning: false
-
+#| echo: false
+reds_request <- request("https://statsapi.mlb.com/api/v1/schedule") |>
+  req_url_query(sportId = 1, teamId = 113, season = 2026, gameType = "R")
+reds_request |> req_dry_run()
+reds_response <- reds_request |> req_perform()
+resp_status(reds_response)
+resp_url(reds_response)
 ```
 
 ## Read the fine print
@@ -52,9 +58,9 @@ library(httr2)
 
 ```
 
-> What does it say? Follow the link it gives you. What kinds of use does MLB permit?
+> What does it say? Follow the link it gives you. What kinds of use does MLB permit? "The accounts, descriptions, data and presentation in the referring page (the "Materials") are proprietary content of MLB Advanced Media, L.P ("MLBAM"). Only individual, non-commercial, non-bulk use of the Materials is permitted and any other use of the Materials is prohibited without prior written authorization from MLBAM. Authorized users of the Materials are prohibited from using the Materials in any commercial manner other than as expressly authorized by MLBAM."
 
-> Is this assignment a permitted use? Would it still be if all 25 of us wrote a loop that requested every game of every season? Explain.
+> Is this assignment a permitted use? Would it still be if all 25 of us wrote a loop that requested every game of every season? Explain. Yes, but if we were doing loops that would be bulk so it would not be permitted.
 
 ## Save it, then work from the file
 
@@ -62,18 +68,38 @@ Save the raw response to `data/raw/reds_2026.json`. Then read it back in with `j
 
 ```{r}
 #| warning: false
+#| echo: false
+#| eval: false
+request("https://statsapi.mlb.com/api/v1/schedule") |>
+  req_url_query(sportId = 1, teamId = 113, season = 2026, gameType = "R") |> 
+  req_perform(path = "data/raw/reds_2026.json")
 
+reds_json <- jsonlite::read_json("data/raw/reds_2026.json")
 ```
 
 > Why work from the file instead of sending the request every time you render? Give two reasons.
+>
+> Working from a saved file avoids repeatedly requesting the same data from MLB's server, and it makes the analysis reproducible because the data will not unexpectedly change between renders.
 
 > Fill this in:
 >
 > - URL:
+>
+>   ```         
+>   https://statsapi.mlb.com/api/v1/schedule?sportId=1&teamId=113&season=2026&gameType=R
+>   ```
+>
 > - Date and time requested:
+>
+>   10/26 9:00 PM
+>
 > - Status:
+>
+>   200 OK
 
 > If you ran this same request in March 2027, would you get exactly the same file? What might change?
+>
+> Running the request again in March 2027 might produce a different file because MLB can correct scores, update game status, or change metadata even after the season ends.
 
 # Part 2: Make it a table
 
@@ -83,10 +109,15 @@ Use `str()` the way we did in class: look at one date, then one game inside it.
 
 ```{r}
 #| warning: false
-
+#| echo: false
+#| eval: false
+str(reds_json$dates[[1]], max.level = 2)
+str(reds_json$dates[[1]]$games[[1]], max.level = 3)
 ```
 
 > Which parts are `[ ]` (lists of things, which become rows) and which are `{ }` (named things, which become columns)? Write the path from the top of the response down to the Reds' score in one game.
+>
+> The dates field is an array of date entries \[ \], and each date has a games list \[ \]. Individual dates, games, teams, and status objects are named objects { }. A path to the Reds' score is dates -\> games -\> teams -\> home -\> score when the Reds are home, or dates -\> games -\> teams -\> away -\> score when the Reds are away. We identify which side is Cincinnati using team ID 113.
 
 ## Rectangle it
 
@@ -103,12 +134,38 @@ Start from `tibble(day = sched$dates)`. In class, `features` was one list of ear
 
 ```{r}
 #| warning: false
+#| echo: false
+#| eval: false
+str(reds_json$dates[[1]], max.level = 1)
+reds <- tibble(day = reds_json$dates)
+reds
+reds |> 
+  unnest_longer(day)
+reds_games <- reds |> hoist(day,
+                            games = "games") |> 
+  select(games) |> 
+  unnest_longer(games) |> 
+  hoist(games,
+        status = c("status", "detailedState"),
+        game_pk = "gamePk",
+        game_date = "gameDate",
+        official_date = "officialDate",
+        teams = "teams") |> 
+  hoist(teams,
+        home = "home",
+        away = "away") |>
+  hoist(home, home_id = c("team", "id"), home_score = "score") |>
+  hoist(away, away_id = c("team", "id"), away_score = "score") |>
+  select(game_pk, game_date, official_date, status,
+         home_id, away_id, home_score, away_score)
 
+reds_games
+reds_json$totalGames
 ```
 
-> How many rows does `reds` have? What does `totalGames` say?
+> How many rows does `reds` have? What does `totalGames` say? 165. 165.
 
-> A Major League regular season is 162 games. What's going on?
+> A Major League regular season is 162 games. What's going on? A postponed or rescheduled game can have more than one entry.
 
 # Part 3: What is one row?
 
@@ -118,12 +175,26 @@ Start from `tibble(day = sched$dates)`. In class, `features` was one list of ear
 
 ```{r}
 #| warning: false
-
+#| echo: false
+n_distinct(reds_games$game_pk)
+repeated_ids <- reds_games |>
+  count(game_pk) |>
+  filter(n > 1)
+repeated_ids
+reds_games |>
+  semi_join(repeated_ids, by = "game_pk") |>
+  arrange(game_pk, official_date)
 ```
 
-> How many distinct `game_pk` values are there? Which ones appear more than once?
+> How many distinct `game_pk` values are there? Which ones appear more than once? 162.
+>
+> |        |     |     |     |     |
+> |-------:|----:|-----|-----|-----|
+> | 824490 |   2 |     |     |     |
+> | 824514 |   2 |     |     |     |
+> | 824518 |   2 |     |     |     |
 
-> Look at every row for those games, alongside their other columns. What happened to them?
+> Look at every row for those games, alongside their other columns. What happened to them? They were postponed.
 
 > Hint: you might want to use a filtering join :)
 
@@ -133,30 +204,75 @@ You want one row per game that was actually played. Use `distinct(game_pk, .keep
 
 ```{r}
 #| warning: false
-
+#| echo: false
+reds_first <- reds_games |>
+  distinct(game_pk, .keep_all = TRUE)
+reds_first |>
+  semi_join(repeated_ids, by = "game_pk")
 ```
 
-> For the games that appeared twice, which row did `distinct()` keep? Look at the scores. Is that the row you wanted?
+> For the games that appeared twice, which row did `distinct()` keep? Look at the scores. Is that the row you wanted? Kept the postponed games which do not have scores so it is not the row we want.
 
 > Fix it. Show that your result has one row per `game_pk` and that every row has a score.
 
 ```{r}
 #| warning: false
+#| echo: false
+reds_played <- reds_games |>
+  filter(!is.na(home_score), !is.na(away_score)) |>
+  distinct(game_pk, .keep_all = TRUE)
+reds_played |>
+  summarise(rows = n(),
+            distinct_ids = n_distinct(game_pk),
+            missing_home = sum(is.na(home_score)),
+            missing_away = sum(is.na(away_score)))
+reds_played |>
+  semi_join(repeated_ids, by = "game_pk")
 
+reds_results <- reds_played |>
+  mutate(reds_score = if_else(home_id == 113, home_score, away_score),
+         other_score = if_else(home_id == 113, away_score, home_score),
+         result = case_when(
+           reds_score > other_score ~ "Win",
+           reds_score < other_score ~ "Loss",
+           TRUE ~ "Tie"))
+reds_results |> count(result)
 ```
 
 # Part 4: When did they play?
 
 ```{r}
 #| warning: false
+#| echo: false
+reds_dates <- reds_results |>
+  mutate(game_datetime = as.POSIXct(game_date,
+                                    format = "%Y-%m-%dT%H:%M:%SZ",
+                                    tz = "UTC"),
+         utc_date = as.Date(game_datetime, tz = "UTC"),
+         official_day = as.Date(official_date),
+         different_date = utc_date != official_day)
+reds_dates |> count(different_date)
+reds_dates |>
+  filter(different_date) |>
+  select(game_pk, game_date, official_date, home_id, away_id) 
 
+utc_weekdays <- reds_dates |>
+  mutate(weekday = weekdays(utc_date)) |>
+  count(weekday, name = "utc_games")
+official_weekdays <- reds_dates |>
+  mutate(weekday = weekdays(official_day)) |>
+  count(weekday, name = "official_games")
+utc_weekdays
+official_weekdays
+utc_weekdays |>
+  full_join(official_weekdays, by = "weekday")
 ```
 
-> Parse `game_date`. What time zone is it in? How do you know?
+> Parse `game_date`. What time zone is it in? How do you know? UTC, the Z at the end.
 
-> For how many games does the **date** part of `game_date` differ from `official_date`? Look at a few. What do they have in common?
+> For how many games does the **date** part of `game_date` differ from `official_date`? Look at a few. What do they have in common? Evening games can be seen as the next day because of the time difference between UTC and the local timezone of the game.
 
-> Count the Reds' games by day of the week twice: once using `game_date` and once using `official_date`. Do you get the same counts? Which one answers "what day did they play?"
+> Count the Reds' games by day of the week twice: once using `game_date` and once using `official_date`. Do you get the same counts? Which one answers "what day did they play?" No. official_date answers the question.
 
 > **Optional:** Convert `game_date` to `America/New_York`. Does that make it agree with `official_date`? Would Eastern time be the right choice for a Reds game played in San Diego?
 
@@ -167,6 +283,8 @@ You want one row per game that was actually played. Use `distinct(game_pk, .keep
 > If you used an AI system: the exact prompt, exactly what it returned, what it got wrong or left unclear, and what you changed.
 
 > If you didn't use one, say so.
+
+Got help on everything through "rectangle it" in office hours.
 
 # Submit
 
